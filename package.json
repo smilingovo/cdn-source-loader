@@ -1,0 +1,26 @@
+{
+  "name": "smiling-cdn-source-collect",
+  "version": "1.0.0",
+  "description": "A TypeScript library for fetching CDN resources from unpkg.com and other CDN providers with batch loading, concurrency control, and retry mechanisms",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vite",
+    "test:build": "vite build"
+  },
+  "keywords": [
+    "cdn",
+    "unpkg",
+    "resource-loader",
+    "batch-fetch"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}
