@@ -109,12 +109,10 @@ const concurrency = ref(5);
 const retryCount = ref(3);
 const fileFilter = ref("all");
 
-let loadController: CdnLoadController | null = null;
+let cdnController: CdnLoadController | null = null;
 
 // 断点续传配置对象（外部传入，初始为空）
-const resumeConfig: ResumeConfig = {
-  completed: new Map(),
-};
+const resumeConfig: ResumeConfig = {};
 
 // 状态信息（从 onState 回调中获取）
 const stateInfo = ref<CdnStateInfo>({
@@ -177,8 +175,9 @@ function addLog(
 // 清空日志
 function handleClear() {
   logs.value = [];
-  resumeConfig.completed.clear();
-  loadController = null;
+  // 清空断点续传配置
+  Object.keys(resumeConfig).forEach((key) => delete resumeConfig[key]);
+  cdnController = null;
   stateInfo.value = {
     state: "idle",
     progress: undefined,
@@ -187,11 +186,29 @@ function handleClear() {
     totalCount: 0,
   };
 }
+// 文件过滤器
+function fileFilterFn() {
+  const filterType = fileFilter.value;
+  return filterType === "all"
+    ? undefined
+    : (fileInfo: CdnFileInfo) => {
+        switch (filterType) {
+          case "js":
+            return fileInfo.path.endsWith(".js");
+          case "css":
+            return fileInfo.path.endsWith(".css");
+          case "json":
+            return fileInfo.path.endsWith(".json");
+          default:
+            return true;
+        }
+      };
+}
 
 // 创建或获取控制器
 function getOrCreateController(): CdnLoadController {
-  if (loadController) {
-    return loadController;
+  if (cdnController) {
+    return cdnController;
   }
 
   const url = metaUrl.value.trim();
@@ -199,33 +216,12 @@ function getOrCreateController(): CdnLoadController {
     throw new Error("请输入元数据 URL");
   }
 
-  const concurrencyValue = concurrency.value || 5;
-  const retryCountValue = retryCount.value || 3;
-  const filterType = fileFilter.value;
-
-  // 文件过滤器
-  const fileFilterFn =
-    filterType === "all"
-      ? undefined
-      : (fileInfo: CdnFileInfo) => {
-          switch (filterType) {
-            case "js":
-              return fileInfo.path.endsWith(".js");
-            case "css":
-              return fileInfo.path.endsWith(".css");
-            case "json":
-              return fileInfo.path.endsWith(".json");
-            default:
-              return true;
-          }
-        };
-
   // 创建控制器实例
-  loadController = new CdnResource({
+  cdnController = new CdnResource({
     metaUrl: url,
-    concurrency: concurrencyValue,
-    retryCount: retryCountValue,
-    fileFilter: fileFilterFn,
+    concurrency: concurrency.value || 5,
+    retryCount: retryCount.value || 3,
+    fileFilter: fileFilterFn(),
     resumeConfig,
     onState: (info) => {
       // 统一从 onState 回调中更新状态和统计信息
@@ -240,8 +236,12 @@ function getOrCreateController(): CdnLoadController {
     },
     onTaskEnd: (config) => {
       // 任务结束回调
+      const completedCount = Object.values(config).filter(
+        (value) => value === false
+      ).length;
       addLog(`📦 任务结束，断点续传配置已更新`, "info");
-      addLog(`已完成文件数: ${config.completed.size}`, "info");
+      addLog(`已完成文件数: ${completedCount}`, "info");
+      console.log(config);
     },
     callbacks: {
       onProgress: (progress: ResourceProgress, fileInfo: CdnFileInfo) => {
@@ -274,7 +274,7 @@ function getOrCreateController(): CdnLoadController {
     },
   });
 
-  return loadController;
+  return cdnController;
 }
 
 // 主按钮点击处理（根据按钮文案执行不同操作）
@@ -284,12 +284,12 @@ async function handleMainButton() {
   try {
     if (buttonText === "开始加载") {
       // 如果控制器存在且状态是 completed，需要重新创建
-      if (loadController && stateInfo.value.state === "completed") {
-        loadController = null;
+      if (cdnController && stateInfo.value.state === "completed") {
+        cdnController = null;
       }
 
-      // 清空之前的结果
-      resumeConfig.completed.clear();
+      // 不再清空 resumeConfig，按照配置进行加载
+      // 如果 resumeConfig 有值，会跳过已完成的文件（值为 false），加载未完成的文件
 
       const controller = getOrCreateController();
 
@@ -303,17 +303,17 @@ async function handleMainButton() {
 
       await controller.start();
     } else if (buttonText === "停止") {
-      if (loadController) {
-        loadController.stop();
+      if (cdnController) {
+        cdnController.stop();
         addLog("⏹️ 正在停止加载...", "info");
       }
     } else if (buttonText === "继续") {
       const controller = getOrCreateController();
 
-      addLog(
-        `🔄 继续加载，已完成 ${resumeConfig.completed.size} 个文件`,
-        "info"
-      );
+      const completedCount = Object.values(resumeConfig).filter(
+        (value) => value === false
+      ).length;
+      addLog(`🔄 继续加载，已完成 ${completedCount} 个文件`, "info");
 
       await controller.resume();
     }

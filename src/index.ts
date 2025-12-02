@@ -41,16 +41,24 @@ export class CdnResource implements CdnLoadController {
   constructor(options: CdnLoadOptions) {
     this.options = options;
 
-    // 初始化断点续传配置
-    if (this.options.resumeConfig && !this.options.resumeConfig.completed) {
-      this.options.resumeConfig.completed = new Map();
+    // 验证至少提供了 metaUrl 或 metaData 之一
+    if (!this.options.metaUrl && !this.options.metaData) {
+      throw new Error(
+        "Either metaUrl or metaData must be provided in CdnLoadOptions"
+      );
+    }
+
+    // 初始化断点续传配置（如果不存在则创建空对象）
+    if (!this.options.resumeConfig) {
+      this.options.resumeConfig = {};
     }
 
     // 根据 resumeConfig 判断初始状态
-    if (
-      this.options.resumeConfig?.completed &&
-      this.options.resumeConfig.completed.size > 0
-    ) {
+    // 如果有已完成的文件（值为 false），可能是停止状态
+    const hasCompletedFiles = Object.values(this.options.resumeConfig).some(
+      (value) => value === false
+    );
+    if (hasCompletedFiles) {
       // 有已完成的任务，可能是停止状态或完成状态
       this.state = LoadState.STOPPED;
     } else {
@@ -60,11 +68,14 @@ export class CdnResource implements CdnLoadController {
 
     // 初始化时触发状态回调
     if (this.options.onState) {
+      const completedCount = Object.values(this.options.resumeConfig).filter(
+        (value) => value === false
+      ).length;
       const stateInfo: CdnStateInfo = {
         state: this.state,
         progress: undefined,
         isRunning: false,
-        completedCount: this.options.resumeConfig?.completed?.size || 0,
+        completedCount,
         totalCount: 0,
       };
       this.options.onState(stateInfo);
@@ -104,20 +115,29 @@ export class CdnResource implements CdnLoadController {
 
   /**
    * 判断是否可以开始
+   * 允许从 IDLE、COMPLETED、STOPPED 状态开始
+   * 会按照 resumeConfig 配置进行加载（跳过已完成的，加载未完成的）
    */
   canStart(): boolean {
-    return this.state === LoadState.IDLE || this.state === LoadState.COMPLETED;
+    return (
+      this.state === LoadState.IDLE ||
+      this.state === LoadState.COMPLETED ||
+      this.state === LoadState.STOPPED
+    );
   }
 
   /**
    * 判断是否可以继续
    */
   canResume(): boolean {
-    return (
-      this.state === LoadState.STOPPED &&
-      !!this.options.resumeConfig?.completed &&
-      this.options.resumeConfig.completed.size > 0
+    if (this.state !== LoadState.STOPPED || !this.options.resumeConfig) {
+      return false;
+    }
+    // 检查是否有已完成的文件（值为 false）
+    const hasCompletedFiles = Object.values(this.options.resumeConfig).some(
+      (value) => value === false
     );
+    return hasCompletedFiles;
   }
 
   /**
@@ -140,12 +160,29 @@ export class CdnResource implements CdnLoadController {
     const signal = this.options.signal || this.abortController.signal;
 
     try {
-      // 获取元数据
-      const metadata = await fetchMetadata(this.options.metaUrl);
+      // 获取元数据：如果提供了 metaData，直接使用；否则请求 metaUrl
+      let metadata: CdnMetaData;
+      if (this.options.metaData) {
+        metadata = this.options.metaData;
+      } else if (this.options.metaUrl) {
+        metadata = await fetchMetadata(this.options.metaUrl);
+      } else {
+        throw new Error("Either metaUrl or metaData must be provided");
+      }
 
       // 确定基础 URL
-      const resolvedBaseUrl =
-        this.options.baseUrl || extractBaseUrl(this.options.metaUrl);
+      let resolvedBaseUrl: string;
+      if (this.options.baseUrl) {
+        resolvedBaseUrl = this.options.baseUrl;
+      } else if (this.options.metaUrl) {
+        resolvedBaseUrl = extractBaseUrl(this.options.metaUrl);
+      } else if (metadata.prefix) {
+        resolvedBaseUrl = metadata.prefix;
+      } else {
+        throw new Error(
+          "baseUrl must be provided when metaData is used without metaUrl"
+        );
+      }
 
       // 过滤文件列表
       let filesToLoad: CdnFileInfo[] = metadata.files;
@@ -153,35 +190,27 @@ export class CdnResource implements CdnLoadController {
         filesToLoad = metadata.files.filter(this.options.fileFilter);
       }
 
-      // 设置元数据到 resumeConfig
-      if (this.options.resumeConfig) {
-        this.options.resumeConfig.metadata = metadata;
-      }
-
       // 过滤出需要加载的文件（排除已完成的）
       const filesToLoadFiltered: CdnFileInfo[] = [];
-      const existingResults: CdnSourceResult[] = [];
+      let completedCount = 0;
+      let successCount = 0;
+      let failureCount = 0;
 
-      if (this.options.resumeConfig?.completed) {
-        for (const fileInfo of filesToLoad) {
-          const existing = this.options.resumeConfig.completed.get(
-            fileInfo.path
-          );
-          if (existing) {
-            existingResults.push(existing);
-          } else {
-            filesToLoadFiltered.push(fileInfo);
-          }
+      // 统计已完成的文件（resumeConfig 中值为 false 的）
+      for (const fileInfo of filesToLoad) {
+        const configValue = this.options.resumeConfig?.[fileInfo.path];
+        if (configValue === false) {
+          // 已成功，跳过
+          completedCount++;
+          successCount++;
+        } else {
+          // 需要请求（不存在或值为 true）
+          filesToLoadFiltered.push(fileInfo);
         }
-      } else {
-        filesToLoadFiltered.push(...filesToLoad);
       }
 
       const totalFiles = filesToLoad.length;
       const remainingFiles = filesToLoadFiltered.length;
-      let completedCount = existingResults.length;
-      let successCount = existingResults.filter((r) => r.success).length;
-      let failureCount = existingResults.filter((r) => !r.success).length;
 
       // 任务进度更新函数
       const updateTaskProgress = (success: boolean) => {
@@ -211,7 +240,7 @@ export class CdnResource implements CdnLoadController {
       };
 
       // 如果有已完成的，先更新进度
-      if (existingResults.length > 0 && this.options.onTaskProgress) {
+      if (completedCount > 0 && this.options.onTaskProgress) {
         const progress: TaskProgress = {
           completed: completedCount,
           total: totalFiles,
@@ -259,9 +288,10 @@ export class CdnResource implements CdnLoadController {
               signal
             );
 
-            // 保存到断点续传配置
-            if (this.options.resumeConfig?.completed) {
-              this.options.resumeConfig.completed.set(fileInfo.path, result);
+            // 回写到断点续传配置
+            // 成功则标记为 false（已成功，下次跳过），失败则标记为 true（需要重新请求）
+            if (this.options.resumeConfig) {
+              this.options.resumeConfig[fileInfo.path] = !result.success;
             }
 
             // 任务完成后更新进度
@@ -310,6 +340,9 @@ export class CdnResource implements CdnLoadController {
 
   /**
    * 开始加载（首次调用时执行）
+   * 如果 resumeConfig 有值，会按照配置进行加载：
+   * - 值为 false 的文件会跳过（已成功）
+   * - 值为 true 或不存在的文件会进行加载
    */
   async start(): Promise<void> {
     if (!this.canStart()) {
@@ -318,15 +351,17 @@ export class CdnResource implements CdnLoadController {
       );
     }
 
-    // 如果状态是 COMPLETED，重置为 IDLE
-    if (this.state === LoadState.COMPLETED) {
+    // 如果状态是 COMPLETED 或 STOPPED，重置为 IDLE
+    // 这样会重新分析 resumeConfig，按照配置加载
+    if (
+      this.state === LoadState.COMPLETED ||
+      this.state === LoadState.STOPPED
+    ) {
       this.state = LoadState.IDLE;
     }
 
-    // 清空之前的结果（如果是新开始）
-    if (this.options.resumeConfig) {
-      this.options.resumeConfig.completed.clear();
-    }
+    // 不再清空 resumeConfig，按照配置进行加载
+    // 如果用户需要重新开始，应该手动清空 resumeConfig
 
     await this.executeLoad();
   }

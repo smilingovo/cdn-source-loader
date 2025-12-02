@@ -30,9 +30,7 @@ npm run build
 ```typescript
 import { CdnResource, type ResumeConfig } from "smiling-cdn-source-collect";
 
-const resumeConfig: ResumeConfig = {
-  completed: new Map(),
-};
+const resumeConfig: ResumeConfig = {};
 
 const loader = new CdnResource({
   metaUrl: "https://unpkg.com/monaco-editor@0.54.0/min/?meta",
@@ -49,7 +47,10 @@ const loader = new CdnResource({
     console.log(`任务进度: ${progress.completed}/${progress.total}`);
   },
   onTaskEnd: (config) => {
-    console.log(`完成，共加载 ${config.completed.size} 个文件`);
+    const completedCount = Object.values(config).filter(
+      (value) => value === false
+    ).length;
+    console.log(`完成，共加载 ${completedCount} 个文件`);
   },
   callbacks: {
     onProgress: (progress, fileInfo) => {
@@ -95,9 +96,7 @@ await loader.start();
 ### 停止和继续（断点续传）
 
 ```typescript
-const resumeConfig: ResumeConfig = {
-  completed: new Map(),
-};
+const resumeConfig: ResumeConfig = {};
 
 const loader = new CdnResource({
   metaUrl: "https://unpkg.com/monaco-editor@0.54.0/min/?meta",
@@ -149,11 +148,18 @@ new CdnResource(options: CdnLoadOptions): CdnResource
 
 #### 参数
 
-- `metaUrl` (string, 必需): 元数据 URL 地址，例如 `https://unpkg.com/monaco-editor@0.54.0/min/?meta`
+- `metaUrl` (string, 可选): 元数据 URL 地址，例如 `https://unpkg.com/monaco-editor@0.54.0/min/?meta`
+  - 如果提供了 `metaData`，则不需要提供 `metaUrl`
+  - `metaUrl` 和 `metaData` 至少需要提供一个
+- `metaData` (CdnMetaData, 可选): 元数据对象
+  - 如果提供了 `metaData`，则不需要请求 `metaUrl`
+  - `metaUrl` 和 `metaData` 至少需要提供一个
 - `concurrency` (number, 可选): 并发数量，默认 5
 - `retryCount` (number, 可选): 重试次数，默认 3
 - `retryDelay` (number, 可选): 重试延迟（毫秒），默认 1000
-- `baseUrl` (string, 可选): 基础 URL，如果不提供，将从 metaUrl 中提取
+- `baseUrl` (string, 可选): 基础 URL
+  - 如果不提供，将从 `metaUrl` 中提取，或使用 `metaData.prefix`
+  - 如果提供了 `metaData` 但没有 `metaUrl`，且 `metaData.prefix` 不存在，则必须提供 `baseUrl`
 - `resumeConfig` (ResumeConfig, 可选): 断点续传配置对象
 - `fileFilter` (function, 可选): 文件过滤器，用于过滤需要加载的文件
 - `onState` (function, 可选): 状态变化回调 `(stateInfo: CdnStateInfo) => void`
@@ -262,13 +268,25 @@ new CdnResource(options: CdnLoadOptions): CdnResource
 
 ### `ResumeConfig`
 
-断点续传配置。
+断点续传配置。简单的配置对象，key 为文件路径，value 为是否需要重新请求。
 
 ```typescript
 {
-  completed: Map<string, CdnSourceResult>; // 已完成的资源结果
-  metadata?: CdnMetaData;                   // 元数据信息
+  [filePath: string]: boolean | undefined;
 }
+```
+
+- `false` 或不存在：表示已成功，跳过请求
+- `true`：表示需要重新请求
+
+**示例：**
+
+```typescript
+const resumeConfig: ResumeConfig = {
+  "/path/to/file1.js": false, // 已成功，跳过
+  "/path/to/file2.js": true, // 需要重新请求
+  // 其他文件不存在，表示需要请求
+};
 ```
 
 ### `CdnSourceResult`
@@ -291,7 +309,11 @@ new CdnResource(options: CdnLoadOptions): CdnResource
 3. 如果不需要进度跟踪，响应体不会被预先读取，可以在回调中按需处理
 4. 并发控制使用队列机制，确保同时进行的请求数量不超过设定值
 5. 断点续传配置对象需要外部维护，建议持久化存储以便页面刷新后可以继续
-6. 状态变化通过 `onState` 回调实时通知，可以用于更新 UI
+6. `resumeConfig` 是一个简单的对象，key 为文件路径，value 为 `boolean`：
+   - `false` 表示已成功，下次跳过请求
+   - `true` 表示需要重新请求
+   - 不存在表示需要请求
+7. 状态变化通过 `onState` 回调实时通知，可以用于更新 UI
 
 ## 开发
 

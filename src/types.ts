@@ -92,18 +92,12 @@ export interface TaskProgress {
 
 /**
  * 断点续传配置对象
- * 用于存储已完成的资源，支持断点续传
+ * 简单的配置对象，key 为文件路径，value 为是否需要重新请求
+ * - false 或不存在：表示已成功，跳过请求
+ * - true：表示需要重新请求
  */
 export interface ResumeConfig {
-  /**
-   * 已完成的资源结果，以文件路径为 key
-   */
-  completed: Map<string, CdnSourceResult>;
-
-  /**
-   * 元数据信息（用于验证续传时是否匹配）
-   */
-  metadata?: CdnMetaData;
+  [filePath: string]: boolean | undefined;
 }
 
 /**
@@ -112,8 +106,16 @@ export interface ResumeConfig {
 export interface CdnLoadOptions {
   /**
    * 元数据 URL 地址
+   * 如果提供了 metaData，则不需要提供 metaUrl
    */
-  metaUrl: string;
+  metaUrl?: string;
+
+  /**
+   * 元数据对象
+   * 如果提供了 metaData，则不需要请求 metaUrl
+   * metaUrl 和 metaData 至少需要提供一个
+   */
+  metaData?: CdnMetaData;
 
   /**
    * 并发数量控制，默认 5
@@ -163,7 +165,7 @@ export interface CdnLoadOptions {
 
   /**
    * 基础 URL，用于构建完整的资源 URL
-   * 如果不提供，将从 metaUrl 中提取
+   * 如果不提供，将从 metaUrl 中提取，或使用 metaData.prefix
    */
   baseUrl?: string;
 
