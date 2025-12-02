@@ -17,7 +17,7 @@ import { loadResource, ConcurrencyQueue } from "./loader";
 /**
  * 批量加载状态枚举
  */
-enum LoadState {
+export enum LoadState {
   /** 空闲状态 */
   IDLE = "idle",
   /** 运行中 */
@@ -153,7 +153,8 @@ export class CdnResource implements CdnLoadController {
   private async executeLoad(): Promise<void> {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.state = LoadState.RUNNING;
+    // 更新状态为运行中，并触发 onState 回调
+    this.updateState(LoadState.RUNNING);
 
     // 创建新的 AbortController
     this.abortController = new AbortController();
@@ -221,26 +222,7 @@ export class CdnResource implements CdnLoadController {
           failureCount++;
         }
 
-        if (this.options.onTaskProgress) {
-          const progress: TaskProgress = {
-            completed: completedCount,
-            total: totalFiles,
-            percentage:
-              totalFiles > 0
-                ? Math.round((completedCount / totalFiles) * 100)
-                : 0,
-            success: successCount,
-            failure: failureCount,
-          };
-          this.currentProgress = progress;
-          this.options.onTaskProgress(progress);
-          // 触发状态回调
-          this.updateState(this.state, progress);
-        }
-      };
-
-      // 如果有已完成的，先更新进度
-      if (completedCount > 0 && this.options.onTaskProgress) {
+        // 更新进度信息（无论是否有 onTaskProgress 回调）
         const progress: TaskProgress = {
           completed: completedCount,
           total: totalFiles,
@@ -252,8 +234,36 @@ export class CdnResource implements CdnLoadController {
           failure: failureCount,
         };
         this.currentProgress = progress;
-        this.options.onTaskProgress(progress);
-        // 触发状态回调
+
+        // 触发 onTaskProgress 回调（如果存在）
+        if (this.options.onTaskProgress) {
+          this.options.onTaskProgress(progress);
+        }
+
+        // 独立触发 onState 回调（无论是否有 onTaskProgress）
+        this.updateState(this.state, progress);
+      };
+
+      // 如果有已完成的，先更新进度
+      if (completedCount > 0) {
+        const progress: TaskProgress = {
+          completed: completedCount,
+          total: totalFiles,
+          percentage:
+            totalFiles > 0
+              ? Math.round((completedCount / totalFiles) * 100)
+              : 0,
+          success: successCount,
+          failure: failureCount,
+        };
+        this.currentProgress = progress;
+
+        // 触发 onTaskProgress 回调（如果存在）
+        if (this.options.onTaskProgress) {
+          this.options.onTaskProgress(progress);
+        }
+
+        // 独立触发 onState 回调（无论是否有 onTaskProgress）
         this.updateState(this.state, progress);
       }
 

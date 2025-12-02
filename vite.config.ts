@@ -1,25 +1,14 @@
 import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-import { resolve } from "path";
-import { fileURLToPath } from "url";
+import { getLibConfig } from "./config/lib.config";
+import testConfig from "./config/test.config";
 
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
-
-export default defineConfig({
-  root: "./test",
-  plugins: [vue()],
-  server: {
-    port: 3000,
-    open: true,
-    hmr: true, // 启用热更新
-  },
-  resolve: {
-    alias: {
-      "@": resolve(__dirname, "./src"),
-    },
-  },
-  build: {
-    outDir: "../dist-test",
-    emptyOutDir: true,
-  },
+export default defineConfig(({ mode }) => {
+  // 根据 mode 选择配置
+  if (mode === "lib") {
+    // 库构建 - 未压缩
+    return getLibConfig();
+  } else {
+    // 默认使用测试页面配置
+    return testConfig;
+  }
 });

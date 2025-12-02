@@ -1,16 +1,27 @@
 {
   "name": "@smiling/cdn-source-loader",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "A TypeScript library for fetching CDN resources from unpkg.com and other CDN providers with batch loading, concurrency control, and retry mechanisms",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.esm.js",
+  "browser": "dist/index.umd.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.cjs.js",
+      "browser": "./dist/index.umd.js",
+      "default": "./dist/index.esm.js"
+    }
+  },
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && vite build --mode lib",
     "dev": "tsc --watch",
     "test": "vite",
     "test:build": "vite build",
