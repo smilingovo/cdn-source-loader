@@ -1,7 +1,7 @@
 /**
  * CDN 元数据文件信息
  */
-export interface CDNFileInfo {
+export interface CdnFileInfo {
   path: string;
   size: number;
   type: string;
@@ -11,11 +11,11 @@ export interface CDNFileInfo {
 /**
  * CDN 元数据响应
  */
-export interface CDNMetadata {
+export interface CdnMetaData {
   package: string;
   version: string;
   prefix: string;
-  files: CDNFileInfo[];
+  files: CdnFileInfo[];
 }
 
 /**
@@ -36,28 +36,28 @@ export interface ResourceCallbacks {
    * @param progress 进度信息
    * @param fileInfo 文件信息
    */
-  onProgress?: (progress: ResourceProgress, fileInfo: CDNFileInfo) => void;
+  onProgress?: (progress: ResourceProgress, fileInfo: CdnFileInfo) => void;
 
   /**
    * 加载成功回调
    * @param data 资源数据（Response 对象）
    * @param fileInfo 文件信息
    */
-  onSuccess?: (data: Response, fileInfo: CDNFileInfo) => void;
+  onSuccess?: (data: Response, fileInfo: CdnFileInfo) => void;
 
   /**
    * 加载失败回调
    * @param error 错误信息
    * @param fileInfo 文件信息
    */
-  onError?: (error: Error, fileInfo: CDNFileInfo) => void;
+  onError?: (error: Error, fileInfo: CdnFileInfo) => void;
 
   /**
    * 资源加载完成后的回调（成功时调用）
    * @param data 资源数据（Response 对象）
    * @param fileInfo 文件信息
    */
-  onEnd?: (data: Response, fileInfo: CDNFileInfo) => void;
+  onEnd?: (data: Response, fileInfo: CdnFileInfo) => void;
 }
 
 /**
@@ -70,7 +70,7 @@ export interface TaskProgress {
   completed: number;
 
   /**
-   * 总任务数
+   * 总任务数（总文件数）
    */
   total: number;
 
@@ -91,9 +91,25 @@ export interface TaskProgress {
 }
 
 /**
- * 批量加载配置选项
+ * 断点续传配置对象
+ * 用于存储已完成的资源，支持断点续传
  */
-export interface BatchLoadOptions {
+export interface ResumeConfig {
+  /**
+   * 已完成的资源结果，以文件路径为 key
+   */
+  completed: Map<string, CdnSourceResult>;
+
+  /**
+   * 元数据信息（用于验证续传时是否匹配）
+   */
+  metadata?: CdnMetaData;
+}
+
+/**
+ * CDN 资源加载配置选项
+ */
+export interface CdnLoadOptions {
   /**
    * 元数据 URL 地址
    */
@@ -126,27 +142,52 @@ export interface BatchLoadOptions {
   onTaskProgress?: (progress: TaskProgress) => void;
 
   /**
+   * 任务结束回调（成功完成或被停止时调用）
+   * @param resumeConfig 断点续传配置信息
+   */
+  onTaskEnd?: (resumeConfig: ResumeConfig) => void;
+
+  /**
+   * 状态变化回调
+   * 当控制器状态发生变化时调用，返回当前状态信息
+   * @param stateInfo 状态信息
+   */
+  onState?: (stateInfo: CdnStateInfo) => void;
+
+  /**
    * 文件过滤器，用于过滤需要加载的文件
    * @param fileInfo 文件信息
    * @returns 是否加载该文件
    */
-  fileFilter?: (fileInfo: CDNFileInfo) => boolean;
+  fileFilter?: (fileInfo: CdnFileInfo) => boolean;
 
   /**
    * 基础 URL，用于构建完整的资源 URL
    * 如果不提供，将从 metaUrl 中提取
    */
   baseUrl?: string;
+
+  /**
+   * 断点续传配置对象
+   * 如果提供，会跳过已完成的资源，只加载未完成的
+   * 加载完成后会更新此对象
+   */
+  resumeConfig?: ResumeConfig;
+
+  /**
+   * AbortSignal，用于取消请求
+   */
+  signal?: AbortSignal;
 }
 
 /**
- * 加载结果
+ * CDN 资源加载结果
  */
-export interface LoadResult {
+export interface CdnSourceResult {
   /**
    * 文件信息
    */
-  fileInfo: CDNFileInfo;
+  fileInfo: CdnFileInfo;
 
   /**
    * 响应对象（成功时）
@@ -165,13 +206,13 @@ export interface LoadResult {
 }
 
 /**
- * 批量加载结果
+ * CDN 资源加载结果
  */
-export interface BatchLoadResult {
+export interface CdnLoadResult {
   /**
    * 所有加载结果
    */
-  results: LoadResult[];
+  results: CdnSourceResult[];
 
   /**
    * 成功的数量
@@ -186,5 +227,56 @@ export interface BatchLoadResult {
   /**
    * 元数据信息
    */
-  metadata: CDNMetadata;
+  metadata: CdnMetaData;
+}
+
+/**
+ * 状态信息
+ */
+export interface CdnStateInfo {
+  /**
+   * 当前状态：idle | running | stopped | completed
+   */
+  state: string;
+
+  /**
+   * 任务进度信息（如果有）
+   */
+  progress?: TaskProgress;
+
+  /**
+   * 是否正在运行
+   */
+  isRunning: boolean;
+
+  /**
+   * 已完成文件数
+   */
+  completedCount: number;
+
+  /**
+   * 总文件数
+   */
+  totalCount: number;
+}
+
+/**
+ * CDN 资源加载控制器
+ * 提供开始、停止和继续加载的方法
+ */
+export interface CdnLoadController {
+  /**
+   * 开始加载（首次调用时执行）
+   */
+  start: () => Promise<void>;
+
+  /**
+   * 停止加载
+   */
+  stop: () => void;
+
+  /**
+   * 继续加载（从断点处继续）
+   */
+  resume: () => Promise<void>;
 }

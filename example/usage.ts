@@ -1,14 +1,41 @@
 /**
  * 使用示例
  */
-import { batchLoadCDNResources } from '../src/index';
+import {
+  CdnResource,
+  type ResumeConfig,
+  type CdnStateInfo,
+} from "../src/index";
 
 // 示例 1: 基本使用
 async function example1() {
-  const result = await batchLoadCDNResources({
-    metaUrl: 'https://unpkg.com/monaco-editor@0.54.0/min/?meta',
+  const resumeConfig: ResumeConfig = {
+    completed: new Map(),
+  };
+
+  const loader = new CdnResource({
+    metaUrl: "https://unpkg.com/monaco-editor@0.54.0/min/?meta",
     concurrency: 5,
     retryCount: 3,
+    resumeConfig,
+    onState: (stateInfo: CdnStateInfo) => {
+      // 监听状态变化
+      console.log(`状态: ${stateInfo.state}, 运行中: ${stateInfo.isRunning}`);
+      if (stateInfo.progress) {
+        console.log(
+          `进度: ${stateInfo.progress.completed}/${stateInfo.progress.total} (${stateInfo.progress.percentage}%)`
+        );
+      }
+    },
+    onTaskProgress: (progress) => {
+      console.log(
+        `任务进度: ${progress.completed}/${progress.total} (${progress.percentage}%)`
+      );
+      console.log(`成功: ${progress.success}, 失败: ${progress.failure}`);
+    },
+    onTaskEnd: (config) => {
+      console.log(`任务完成，共加载 ${config.completed.size} 个文件`);
+    },
     callbacks: {
       onProgress: (progress, fileInfo) => {
         console.log(`加载进度: ${fileInfo.path} - ${progress.percentage}%`);
@@ -31,19 +58,28 @@ async function example1() {
       },
     },
   });
-  
-  console.log(`总共: ${result.results.length}, 成功: ${result.successCount}, 失败: ${result.failureCount}`);
+
+  // 开始加载
+  await loader.start();
 }
 
 // 示例 2: 使用文件过滤器
 async function example2() {
-  const result = await batchLoadCDNResources({
-    metaUrl: 'https://unpkg.com/monaco-editor@0.54.0/min/?meta',
+  const resumeConfig: ResumeConfig = {
+    completed: new Map(),
+  };
+
+  const loader = new CdnResource({
+    metaUrl: "https://unpkg.com/monaco-editor@0.54.0/min/?meta",
     concurrency: 3,
     retryCount: 2,
+    resumeConfig,
     fileFilter: (fileInfo) => {
       // 只加载 JavaScript 文件
-      return fileInfo.path.endsWith('.js');
+      return fileInfo.path.endsWith(".js");
+    },
+    onTaskProgress: (progress) => {
+      console.log(`过滤后加载了 ${progress.completed} 个文件`);
     },
     callbacks: {
       onSuccess: async (response, fileInfo) => {
@@ -51,18 +87,29 @@ async function example2() {
       },
     },
   });
-  
-  console.log(`过滤后加载了 ${result.results.length} 个文件`);
+
+  await loader.start();
 }
 
-// 示例 3: 自定义基础 URL
+// 示例 3: 自定义基础 URL 和状态监听
 async function example3() {
-  const result = await batchLoadCDNResources({
-    metaUrl: 'https://unpkg.com/monaco-editor@0.54.0/min/?meta',
-    baseUrl: 'https://unpkg.com/monaco-editor@0.54.0',
+  const resumeConfig: ResumeConfig = {
+    completed: new Map(),
+  };
+
+  const loader = new CdnResource({
+    metaUrl: "https://unpkg.com/monaco-editor@0.54.0/min/?meta",
+    baseUrl: "https://unpkg.com/monaco-editor@0.54.0",
     concurrency: 10,
     retryCount: 5,
     retryDelay: 2000,
+    resumeConfig,
+    onState: (stateInfo: CdnStateInfo) => {
+      console.log(`状态: ${stateInfo.state}, 运行中: ${stateInfo.isRunning}`);
+      if (stateInfo.progress) {
+        console.log(`进度: ${stateInfo.progress.percentage}%`);
+      }
+    },
     callbacks: {
       onProgress: (progress, fileInfo) => {
         if (progress.percentage % 25 === 0) {
@@ -70,7 +117,7 @@ async function example3() {
         }
       },
       onSuccess: async (response, fileInfo) => {
-        const contentType = response.headers.get('content-type');
+        const contentType = response.headers.get("content-type");
         console.log(`${fileInfo.path} - 类型: ${contentType}`);
       },
       onEnd: async (response, fileInfo) => {
@@ -80,12 +127,52 @@ async function example3() {
       },
     },
   });
-  
-  return result;
+
+  await loader.start();
+
+  return loader;
+}
+
+// 示例 4: 停止和继续（断点续传）
+async function example4() {
+  const resumeConfig: ResumeConfig = {
+    completed: new Map(),
+  };
+
+  const loader = new CdnResource({
+    metaUrl: "https://unpkg.com/monaco-editor@0.54.0/min/?meta",
+    concurrency: 5,
+    resumeConfig,
+    onState: (stateInfo: CdnStateInfo) => {
+      console.log(`状态变化: ${stateInfo.state}`);
+    },
+    onTaskProgress: (progress) => {
+      console.log(`进度: ${progress.completed}/${progress.total}`);
+    },
+  });
+
+  // 开始加载
+  const startPromise = loader.start();
+
+  // 3秒后停止
+  setTimeout(() => {
+    loader.stop();
+    console.log("已停止加载");
+  }, 3000);
+
+  try {
+    await startPromise;
+  } catch (error) {
+    console.log("加载被停止");
+  }
+
+  // 继续加载（从断点处继续）
+  await loader.resume();
+  console.log("继续加载完成");
 }
 
 // 运行示例（在浏览器环境中）
 // example1();
 // example2();
 // example3();
-
+// example4();
