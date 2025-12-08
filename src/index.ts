@@ -77,6 +77,7 @@ export class CdnResource implements CdnLoadController {
         isRunning: false,
         completedCount,
         totalCount: 0,
+        isAllSuccess: false,
       };
       this.options.onState(stateInfo);
     }
@@ -108,6 +109,8 @@ export class CdnResource implements CdnLoadController {
         isRunning: this.isRunning,
         completedCount: this.currentProgress?.completed || 0,
         totalCount: this.currentProgress?.total || 0,
+        isAllSuccess:
+          this.currentProgress?.completed === this.currentProgress?.total,
       };
       this.options.onState(stateInfo);
     }
@@ -214,7 +217,7 @@ export class CdnResource implements CdnLoadController {
       const remainingFiles = filesToLoadFiltered.length;
 
       // 任务进度更新函数
-      const updateTaskProgress = (success: boolean) => {
+      const updateTaskProgress = async (success: boolean) => {
         completedCount++;
         if (success) {
           successCount++;
@@ -237,7 +240,7 @@ export class CdnResource implements CdnLoadController {
 
         // 触发 onTaskProgress 回调（如果存在）
         if (this.options.onTaskProgress) {
-          this.options.onTaskProgress(progress);
+          await this.options.onTaskProgress(progress);
         }
 
         // 独立触发 onState 回调（无论是否有 onTaskProgress）
@@ -260,7 +263,7 @@ export class CdnResource implements CdnLoadController {
 
         // 触发 onTaskProgress 回调（如果存在）
         if (this.options.onTaskProgress) {
-          this.options.onTaskProgress(progress);
+          await this.options.onTaskProgress(progress);
         }
 
         // 独立触发 onState 回调（无论是否有 onTaskProgress）
@@ -272,7 +275,7 @@ export class CdnResource implements CdnLoadController {
         this.isRunning = false;
         this.updateState(LoadState.COMPLETED);
         if (this.options.onTaskEnd && this.options.resumeConfig) {
-          this.options.onTaskEnd(this.options.resumeConfig);
+          await this.options.onTaskEnd(this.options.resumeConfig);
         }
         return;
       }
@@ -320,7 +323,7 @@ export class CdnResource implements CdnLoadController {
           this.isRunning = false;
           this.updateState(LoadState.STOPPED);
           if (this.options.onTaskEnd && this.options.resumeConfig) {
-            this.options.onTaskEnd(this.options.resumeConfig);
+            await this.options.onTaskEnd(this.options.resumeConfig);
           }
           return;
         }
@@ -331,7 +334,7 @@ export class CdnResource implements CdnLoadController {
       this.isRunning = false;
       this.updateState(LoadState.COMPLETED);
       if (this.options.onTaskEnd && this.options.resumeConfig) {
-        this.options.onTaskEnd(this.options.resumeConfig);
+        await this.options.onTaskEnd(this.options.resumeConfig);
       }
     } catch (error) {
       // 如果不是停止操作，抛出错误
@@ -341,7 +344,7 @@ export class CdnResource implements CdnLoadController {
       }
       // 停止时，调用 onTaskEnd
       if (this.options.onTaskEnd && this.options.resumeConfig) {
-        this.options.onTaskEnd(this.options.resumeConfig);
+        await this.options.onTaskEnd(this.options.resumeConfig);
       }
     } finally {
       this.isRunning = false;

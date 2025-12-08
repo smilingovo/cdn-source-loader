@@ -36,21 +36,21 @@ export interface ResourceCallbacks {
    * @param data 资源数据（Response 对象）
    * @param fileInfo 文件信息
    */
-  onSuccess?: (data: Response, fileInfo: CdnFileInfo) => void;
+  onSuccess?: (data: Response, fileInfo: CdnFileInfo) => Promise<void> | void;
 
   /**
    * 加载失败回调
    * @param error 错误信息
    * @param fileInfo 文件信息
    */
-  onError?: (error: Error, fileInfo: CdnFileInfo) => void;
+  onError?: (error: Error, fileInfo: CdnFileInfo) => Promise<void> | void;
 
   /**
    * 资源加载完成后的回调（成功时调用）
    * @param data 资源数据（Response 对象）
    * @param fileInfo 文件信息
    */
-  onEnd?: (data: Response, fileInfo: CdnFileInfo) => void;
+  onEnd?: (data: Response, fileInfo: CdnFileInfo) => Promise<void> | void;
 }
 
 /**
@@ -134,20 +134,20 @@ export interface CdnLoadOptions {
    * 任务进度回调，每当一个任务完成时调用
    * @param progress 任务进度信息
    */
-  onTaskProgress?: (progress: TaskProgress) => void;
+  onTaskProgress?: (progress: TaskProgress) => Promise<void> | void;
 
   /**
    * 任务结束回调（成功完成或被停止时调用）
    * @param resumeConfig 断点续传配置信息
    */
-  onTaskEnd?: (resumeConfig: ResumeConfig) => void;
+  onTaskEnd?: (resumeConfig: ResumeConfig) => Promise<void> | void;
 
   /**
    * 状态变化回调
    * 当控制器状态发生变化时调用，返回当前状态信息
    * @param stateInfo 状态信息
    */
-  onState?: (stateInfo: CdnStateInfo) => void;
+  onState?: (stateInfo: CdnStateInfo) => Promise<void> | void;
 
   /**
    * 文件过滤器，用于过滤需要加载的文件
@@ -232,7 +232,7 @@ export interface CdnStateInfo {
   /**
    * 当前状态：idle | running | stopped | completed
    */
-  state: string;
+  state?: string;
 
   /**
    * 任务进度信息（如果有）
@@ -242,17 +242,22 @@ export interface CdnStateInfo {
   /**
    * 是否正在运行
    */
-  isRunning: boolean;
+  isRunning?: boolean;
 
   /**
    * 已完成文件数
    */
-  completedCount: number;
+  completedCount?: number;
 
   /**
    * 总文件数
    */
-  totalCount: number;
+  totalCount?: number;
+
+  /**
+   * 是否全部加载成功
+   */
+  isAllSuccess?: boolean;
 }
 
 /**

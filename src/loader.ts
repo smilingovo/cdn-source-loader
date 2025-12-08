@@ -36,8 +36,8 @@ export async function loadResource(
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      callbacks?.onSuccess?.(response, fileInfo);
-      callbacks?.onEnd?.(response, fileInfo);
+      await callbacks?.onSuccess?.(response, fileInfo);
+      await callbacks?.onEnd?.(response, fileInfo);
       return {
         fileInfo,
         response,
@@ -58,7 +58,7 @@ export async function loadResource(
       }
 
       // 最后一次尝试失败，调用错误回调
-      callbacks?.onError?.(lastError, fileInfo);
+      await callbacks?.onError?.(lastError, fileInfo);
 
       return {
         fileInfo,
