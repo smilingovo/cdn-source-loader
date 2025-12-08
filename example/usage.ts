@@ -38,9 +38,6 @@ async function example1() {
       console.log(`任务完成，共加载 ${completedCount} 个文件`);
     },
     callbacks: {
-      onProgress: (progress, fileInfo) => {
-        console.log(`加载进度: ${fileInfo.path} - ${progress.percentage}%`);
-      },
       onSuccess: async (response, fileInfo) => {
         const data = await response.text();
         console.log(`成功加载: ${fileInfo.path}, 大小: ${data.length} 字节`);
@@ -108,11 +105,6 @@ async function example3() {
       }
     },
     callbacks: {
-      onProgress: (progress, fileInfo) => {
-        if (progress.percentage % 25 === 0) {
-          console.log(`${fileInfo.path}: ${progress.percentage}%`);
-        }
-      },
       onSuccess: async (response, fileInfo) => {
         const contentType = response.headers.get("content-type");
         console.log(`${fileInfo.path} - 类型: ${contentType}`);

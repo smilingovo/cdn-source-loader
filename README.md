@@ -9,7 +9,7 @@
 - ✅ 并发数量控制
 - ✅ 自动重试机制
 - ✅ 加载进度跟踪
-- ✅ 完整的回调支持（onProgress, onSuccess, onError, onEnd）
+- ✅ 完整的回调支持（onSuccess, onError, onEnd）
 - ✅ 文件过滤功能
 - ✅ 状态监听（onState）
 - ✅ 断点续传支持
@@ -53,9 +53,6 @@ const loader = new CdnResource({
     console.log(`完成，共加载 ${completedCount} 个文件`);
   },
   callbacks: {
-    onProgress: (progress, fileInfo) => {
-      console.log(`${fileInfo.path}: ${progress.percentage}%`);
-    },
     onSuccess: async (response, fileInfo) => {
       const data = await response.text();
       console.log(`成功加载: ${fileInfo.path}`);
@@ -173,16 +170,6 @@ const loader = new CdnResource({
 
   // 资源加载回调
   callbacks: {
-    onProgress: (progress, fileInfo) => {
-      // 每 25% 记录一次进度
-      if (progress.percentage % 25 === 0) {
-        console.log(
-          `${fileInfo.path}: ${progress.percentage}% (${(
-            progress.loaded / 1024
-          ).toFixed(2)} KB / ${(progress.total / 1024).toFixed(2)} KB)`
-        );
-      }
-    },
     onSuccess: async (response, fileInfo) => {
       const contentType = response.headers.get("content-type");
       console.log(`✅ 成功加载: ${fileInfo.path} (${contentType})`);
@@ -298,7 +285,7 @@ new CdnResource(options: CdnLoadOptions): CdnResource
 | `onState`        | `(stateInfo: CdnStateInfo) => void`    | 否   | -      | 状态变化回调，当控制器状态发生变化时调用                                                                                                                                                                                                                                                                                                                                              |
 | `onTaskProgress` | `(progress: TaskProgress) => void`     | 否   | -      | 任务进度回调，每当一个任务完成时调用                                                                                                                                                                                                                                                                                                                                                  |
 | `onTaskEnd`      | `(resumeConfig: ResumeConfig) => void` | 否   | -      | 任务结束回调，任务完成或被停止时调用                                                                                                                                                                                                                                                                                                                                                  |
-| `callbacks`      | `ResourceCallbacks`                    | 否   | -      | 资源加载回调函数对象，包含以下回调：<br>- `onProgress`: 加载进度回调 `(progress: ResourceProgress, fileInfo: CdnFileInfo) => void`<br>- `onSuccess`: 加载成功回调 `(response: Response, fileInfo: CdnFileInfo) => void`<br>- `onError`: 加载失败回调 `(error: Error, fileInfo: CdnFileInfo) => void`<br>- `onEnd`: 加载完成回调 `(response: Response, fileInfo: CdnFileInfo) => void` |
+| `callbacks`      | `ResourceCallbacks`                    | 否   | -      | 资源加载回调函数对象，包含以下回调：<br>- `onSuccess`: 加载成功回调 `(response: Response, fileInfo: CdnFileInfo) => void`<br>- `onError`: 加载失败回调 `(error: Error, fileInfo: CdnFileInfo) => void`<br>- `onEnd`: 加载完成回调 `(response: Response, fileInfo: CdnFileInfo) => void` |
 | `signal`         | `AbortSignal`                          | 否   | -      | 用于取消请求的 AbortSignal                                                                                                                                                                                                                                                                                                                                                            |
 
 \* `metaUrl` 和 `metaData` 至少需要提供一个
@@ -385,18 +372,6 @@ new CdnResource(options: CdnLoadOptions): CdnResource
 }
 ```
 
-### `ResourceProgress`
-
-资源加载进度信息。
-
-```typescript
-{
-  loaded: number; // 已加载字节数
-  total: number; // 总字节数
-  percentage: number; // 加载百分比
-}
-```
-
 ### `ResumeConfig`
 
 断点续传配置。简单的配置对象，key 为文件路径，value 为是否需要重新请求。
@@ -436,15 +411,14 @@ const resumeConfig: ResumeConfig = {
 ## 注意事项
 
 1. 本库使用 Fetch API，需要现代浏览器支持
-2. 进度跟踪会读取响应体，因此 `onSuccess` 和 `onEnd` 中接收的 Response 对象包含完整的数据
-3. 如果不需要进度跟踪，响应体不会被预先读取，可以在回调中按需处理
-4. 并发控制使用队列机制，确保同时进行的请求数量不超过设定值
-5. 断点续传配置对象需要外部维护，建议持久化存储以便页面刷新后可以继续
-6. `resumeConfig` 是一个简单的对象，key 为文件路径，value 为 `boolean`：
+2. 响应体不会被预先读取，可以在回调中按需处理（使用 `response.text()`, `response.json()`, `response.blob()` 等）
+3. 并发控制使用队列机制，确保同时进行的请求数量不超过设定值
+4. 断点续传配置对象需要外部维护，建议持久化存储以便页面刷新后可以继续
+5. `resumeConfig` 是一个简单的对象，key 为文件路径，value 为 `boolean`：
    - `false` 表示已成功，下次跳过请求
    - `true` 表示需要重新请求
    - 不存在表示需要请求
-7. 状态变化通过 `onState` 回调实时通知，可以用于更新 UI
+6. 状态变化通过 `onState` 回调实时通知，可以用于更新 UI
 
 ## 开发
 

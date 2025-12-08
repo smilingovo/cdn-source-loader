@@ -244,17 +244,6 @@ function getOrCreateController(): CdnLoadController {
       console.log(config);
     },
     callbacks: {
-      onProgress: (progress: ResourceProgress, fileInfo: CdnFileInfo) => {
-        // 每 25% 记录一次进度
-        if (progress.percentage % 25 === 0 || progress.percentage === 100) {
-          addLog(
-            `进度: ${fileInfo.path} - ${progress.percentage}% (${(
-              progress.loaded / 1024
-            ).toFixed(2)} KB / ${(progress.total / 1024).toFixed(2)} KB)`,
-            "progress"
-          );
-        }
-      },
       onSuccess: async (response, fileInfo) => {
         const contentType = response.headers.get("content-type") || "unknown";
         const size = fileInfo.size || 0;

@@ -32,13 +32,6 @@ export interface ResourceProgress {
  */
 export interface ResourceCallbacks {
   /**
-   * 加载进度回调
-   * @param progress 进度信息
-   * @param fileInfo 文件信息
-   */
-  onProgress?: (progress: ResourceProgress, fileInfo: CdnFileInfo) => void;
-
-  /**
    * 加载成功回调
    * @param data 资源数据（Response 对象）
    * @param fileInfo 文件信息
